@@ -6,6 +6,7 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <chrono>
 
 std::queue<std::string> task_queue;
 std::atomic<bool> shutdown(false);
@@ -16,6 +17,8 @@ const int WORKER_THREADS = 3;
 
 void process_url(const std::string& url) {
     std::cout << "Processing URL: " << url << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(20));
+	std::cout << "Finished processing URL: " << url << std::endl;
 }
 
 void worker_function(int id) {
@@ -66,7 +69,7 @@ int main()
 			cv.notify_all();
             break;
         }
-        else if (command == "download") {
+        else if (command == "download" || command == "dl") {
             std::string url;
             if (iss >> url) {
                 {
@@ -77,8 +80,16 @@ int main()
                 cv.notify_one();
             }
             else {
-                std::cout << "Usage: download <url>" << std::endl;
+				std::cout << "Usage: download <url>" << std::endl;
             }
+        }
+        else if (command == "queue") {
+            std::lock_guard<std::mutex> lock(queue_mutex);
+            if (task_queue.empty()) {
+                std::cout << "No tasks in the queue." << std::endl;
+            } else {
+				std::cout << "Length of queue: " << task_queue.size() << std::endl;
+			}
         }
         else {
             std::cout << "Unknown command: " << command << std::endl;
