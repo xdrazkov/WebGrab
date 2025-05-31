@@ -4,16 +4,40 @@
 #include <queue>
 #include <thread>
 #include <atomic>
+#include <mutex>
+#include <condition_variable>
 
 std::queue<std::string> task_queue;
 std::atomic<bool> shutdown(false);
+std::mutex queue_mutex;
+std::condition_variable cv;
 
 const int WORKER_THREADS = 3;
 
+void process_url(const std::string& url) {
+    std::cout << "Processing URL: " << url << std::endl;
+}
+
 void worker_function(int id) {
 	std::cout << "Worker " << id << " started.\n";
-    while (not shutdown) {
+    while (true) {
+        std::string url;
 
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            cv.wait(lock, [] { return !task_queue.empty() || shutdown; });
+
+            if (shutdown) {
+                break;
+            }
+
+            url = task_queue.front();
+			task_queue.pop();
+        }
+
+        if (!url.empty()) {
+			process_url(url);
+        }
     }
 }
 
@@ -39,13 +63,18 @@ int main()
 
         if (command == "quit") {
             shutdown = true;
+			cv.notify_all();
             break;
         }
         else if (command == "download") {
             std::string url;
             if (iss >> url) {
-                task_queue.push(url);
-                std::cout << "Added download task for URL: " << url << std::endl;
+                {
+                    std::lock_guard<std::mutex> lock(queue_mutex);
+                    task_queue.push(url);
+                    std::cout << "Added download task for URL: " << url << std::endl;
+                }
+                cv.notify_one();
             }
             else {
                 std::cout << "Usage: download <url>" << std::endl;
