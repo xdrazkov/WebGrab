@@ -1,110 +1,122 @@
-#include <iostream>
-#include <string>
-#include <sstream>
-#include <queue>
-#include <thread>
-#include <atomic>
-#include <mutex>
-#include <condition_variable>
-#include <chrono>
+#include <iostream>  
+#include <string>  
+#include <sstream>  
+#include <queue>  
+#include <thread>  
+#include <atomic>  
+#include <mutex>  
+#include <condition_variable>  
+#include <chrono>  
+#include <vector>  
+#include <syncstream>
 
-std::queue<std::string> task_queue;
-std::atomic<bool> shutdown(false);
-std::mutex queue_mutex;
-std::condition_variable cv;
+std::queue<std::string> task_queue;  
+std::atomic<bool> shutdown(false);  
+std::mutex queue_mutex;  
+std::condition_variable cv;  
 
-const int WORKER_THREADS = 3;
+const int WORKER_THREADS = 3;  
 
-void process_url(const std::string& url) {
-    std::cout << "Processing URL: " << url << std::endl;
-    std::this_thread::sleep_for(std::chrono::seconds(20));
-	std::cout << "Finished processing URL: " << url << std::endl;
+void sync_print(const std::string& message) {
+    std::osyncstream out(std::cout);
+    out << message << std::flush;
 }
+
+void sync_println(const std::string& message) {
+    std::osyncstream out(std::cout);
+    out << message << std::endl;
+}
+
+void process_url(const std::string& url) {  
+    //sync_println("Processing URL: " + url);  
+    std::this_thread::sleep_for(std::chrono::seconds(20));  
+    sync_println("Finished processing URL: " + url);  
+}  
 
 void worker_function(int id) {
-	std::cout << "Worker " << id << " started.\n";
-    while (true) {
-        std::string url;
+    //sync_println("Worker " + std::to_string(id) + " started.");
+    while (true) {  
+        std::string url;  
 
-        {
-            std::unique_lock<std::mutex> lock(queue_mutex);
-            cv.wait(lock, [] { return !task_queue.empty() || shutdown; });
+        {  
+            std::unique_lock<std::mutex> lock(queue_mutex);  
+            cv.wait(lock, [] { return !task_queue.empty() || shutdown; });  
 
-            if (shutdown) {
-                break;
-            }
+            if (shutdown) {  
+                break;  
+            }  
 
-            url = task_queue.front();
-			task_queue.pop();
-        }
+            url = task_queue.front();  
+            task_queue.pop();  
+        }  
 
-        if (!url.empty()) {
-			process_url(url);
-        }
-    }
-}
+        if (!url.empty()) {  
+            process_url(url);  
+        }  
+    }  
+}  
 
-int main()
-{
-    std::cout << "WebGrab started.\n";
+int main()  
+{  
+    sync_println("WebGrab started.");
 
-    std::vector<std::thread> workers;
-    for (int i = 0; i < WORKER_THREADS; ++i) {
-        workers.emplace_back(worker_function, i);
-	}
+    std::vector<std::thread> workers;  
+    for (int i = 0; i < WORKER_THREADS; ++i) {  
+        workers.emplace_back(worker_function, i);  
+    }  
 
-    std::string line;
-    while (true) {
-        std::cout << "> " << std::flush;
-        if (!std::getline(std::cin, line)) {
-            break;
-		}
-        
-		std::istringstream iss(line);
-        std::string command;
-		iss >> command;
+    std::string line;  
+    while (true) {  
+        sync_print("> ");
+        if (!std::getline(std::cin, line)) {  
+            break;  
+        }  
 
-        if (command == "quit") {
-            shutdown = true;
-			cv.notify_all();
-            break;
-        }
-        else if (command == "download" || command == "dl") {
-            std::string url;
-            if (iss >> url) {
-                {
-                    std::lock_guard<std::mutex> lock(queue_mutex);
-                    task_queue.push(url);
-                    std::cout << "Added download task for URL: " << url << std::endl;
-                }
-                cv.notify_one();
-            }
-            else {
-				std::cout << "Usage: download <url>" << std::endl;
-            }
-        }
-        else if (command == "queue") {
-            std::lock_guard<std::mutex> lock(queue_mutex);
-            if (task_queue.empty()) {
-                std::cout << "No tasks in the queue." << std::endl;
-            } else {
-				std::cout << "Length of queue: " << task_queue.size() << std::endl;
-			}
-        }
-        else {
-            std::cout << "Unknown command: " << command << std::endl;
-            std::cout << "Available commands: download <url>, quit" << std::endl;
-        }
+        std::istringstream iss(line);
+        std::string command;  
+        iss >> command;  
 
-    }
+        if (command == "quit") {  
+            shutdown = true;  
+            cv.notify_all();  
+            break;  
+        }  
+        else if (command == "download" || command == "dl") {  
+            std::string url;  
+            if (iss >> url) {  
+                {  
+                    std::lock_guard<std::mutex> lock(queue_mutex);  
+                    task_queue.push(url);  
+                    sync_println("Added download task for URL: " + url);
+                }  
+                cv.notify_one();  
+            }  
+            else {  
+                sync_println("Usage: download <url>");
+            }  
+        }  
+        else if (command == "queue") {  
+            std::lock_guard<std::mutex> lock(queue_mutex);  
+            if (task_queue.empty()) {  
+                sync_println("No tasks in the queue.");
+            } else {  
+                sync_println("Length of queue: " + std::to_string(task_queue.size()));
+            }  
+        }  
+        else {  
+            sync_println("Unknown command: " + command);
+            sync_println("Available commands: download <url>, quit");
+        }  
 
-    std::cout << "Waiting for tasks to finish..." << std::endl;
-    for (auto& worker : workers) {
-        if (worker.joinable()) {
-            worker.join();
-        }
-    }
+    }  
 
-	std::cout << "WebGrab terminated." << std::endl;
-    return 0;
+    std::cout << "Waiting for tasks to finish..." << std::endl;  
+    for (auto& worker : workers) {  
+        if (worker.joinable()) {  
+            worker.join();  
+        }  
+    }  
+
+    std::cout << "WebGrab terminated." << std::endl;  
+    return 0;  
 }
