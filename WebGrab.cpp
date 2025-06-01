@@ -31,6 +31,11 @@ void sync_println(const std::string& message) {
     out << message << std::endl;
 }
 
+void sync_error(const std::string& message) {
+    std::osyncstream err(std::cerr);
+    err << message << std::endl;
+}
+
 size_t write_data(void* ptr, size_t size, size_t nmemb, FILE* stream) {
     size_t written = fwrite(ptr, size, nmemb, stream);
     return written;
@@ -75,17 +80,17 @@ void process_url(const std::string& url) {
 			curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
             res = curl_easy_perform(curl);
             if (res != CURLE_OK) {
-                sync_println("CURL error: " + std::string(curl_easy_strerror(res)));
+                sync_error("CURL error: " + std::string(curl_easy_strerror(res)));
             }
             curl_easy_cleanup(curl);
             fclose(fp);
         }
         else {
-			sync_println("Failed to open file for writing: " + filename);
+            sync_error("Failed to open file for writing: " + filename);
         }
     }
     else {
-		sync_println("Failed to initialize CURL for URL: " + url);
+        sync_error("Failed to initialize CURL for URL: " + url);
     }
 
     sync_println("Finished processing URL: " + url);  
@@ -164,8 +169,7 @@ int main()
             }  
         }  
         else {  
-            sync_println("Unknown command: " + command);
-            sync_println("Available commands: download <url>, quit");
+			sync_error("Unknown command: " + command + ". Available commands: download <url>, queue, quit.");
         }  
 
     }  
